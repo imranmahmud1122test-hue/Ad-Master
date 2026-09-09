@@ -1,0 +1,6 @@
+{
+  "name": "AdMaster AI",
+  "description": "Create Better Content. Plan Smarter Ads. Grow Faster. AI-powered marketing assistant for Facebook and social ads, video scripts, hooks, captions, campaigns, and ad performance analysis.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
