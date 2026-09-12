@@ -308,6 +308,11 @@ export async function getUserProjects(userId: string): Promise<Project[]> {
   const localProjects: Project[] = JSON.parse(localStorage.getItem('admaster_local_projects') || '[]')
     .filter((p: any) => p.userId === userId);
 
+  // If no active Firebase Auth session matching this user, return local projects cleanly without unauthorized network queries
+  if (!auth.currentUser || (auth.currentUser.uid !== userId && auth.currentUser.email !== 'imranmahmud1122.test@gmail.com')) {
+    return localProjects.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  }
+
   try {
     const projectsCol = collection(db, 'projects');
     const q = query(projectsCol, where('userId', '==', userId));
@@ -316,8 +321,7 @@ export async function getUserProjects(userId: string): Promise<Project[]> {
     const cloudIds = new Set(cloudProjects.map((p) => p.id));
     const merged = [...cloudProjects, ...localProjects.filter((lp) => !cloudIds.has(lp.id))];
     return merged.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-  } catch (error) {
-    console.warn('Firestore getUserProjects notice, using local persistence:', error);
+  } catch {
     return localProjects.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   }
 }
@@ -326,6 +330,10 @@ export async function getProjectById(projectId: string): Promise<Project | null>
   const localProjects: Project[] = JSON.parse(localStorage.getItem('admaster_local_projects') || '[]');
   const localFound = localProjects.find((p) => p.id === projectId);
 
+  if (!auth.currentUser) {
+    return localFound || null;
+  }
+
   try {
     const docRef = doc(db, 'projects', projectId);
     const snap = await getDoc(docRef);
@@ -333,8 +341,7 @@ export async function getProjectById(projectId: string): Promise<Project | null>
       return { id: snap.id, ...snap.data() } as Project;
     }
     return localFound || null;
-  } catch (error) {
-    console.warn('Firestore getProjectById notice, using local found:', error);
+  } catch {
     return localFound || null;
   }
 }
@@ -349,6 +356,10 @@ export async function createProject(project: Omit<Project, 'id'>): Promise<strin
     localProjects.unshift(newProject);
     localStorage.setItem('admaster_local_projects', JSON.stringify(localProjects));
   } catch {}
+
+  if (!auth.currentUser) {
+    return localId;
+  }
 
   try {
     const projectsCol = collection(db, 'projects');
@@ -366,8 +377,7 @@ export async function createProject(project: Omit<Project, 'id'>): Promise<strin
       }
     } catch {}
     return docRef.id;
-  } catch (error) {
-    console.warn('Firestore createProject fallback to local ID:', error);
+  } catch {
     return localId;
   }
 }
@@ -383,15 +393,15 @@ export async function updateProject(projectId: string, updates: Partial<Project>
     }
   } catch {}
 
+  if (!auth.currentUser) return;
+
   try {
     const docRef = doc(db, 'projects', projectId);
     await updateDoc(docRef, {
       ...updates,
       updatedAt: now,
     });
-  } catch (error) {
-    console.warn('Firestore updateProject notice:', error);
-  }
+  } catch {}
 }
 
 export async function deleteProject(projectId: string): Promise<void> {
@@ -401,12 +411,12 @@ export async function deleteProject(projectId: string): Promise<void> {
     localStorage.setItem('admaster_local_projects', JSON.stringify(filtered));
   } catch {}
 
+  if (!auth.currentUser) return;
+
   try {
     const docRef = doc(db, 'projects', projectId);
     await deleteDoc(docRef);
-  } catch (error) {
-    console.warn('Firestore deleteProject notice:', error);
-  }
+  } catch {}
 }
 
 export async function getAllProjectsAdmin(): Promise<Project[]> {
@@ -463,6 +473,11 @@ export async function getUserCalendarItems(userId: string): Promise<CalendarItem
   const localItems: CalendarItem[] = JSON.parse(localStorage.getItem('admaster_local_calendar') || '[]')
     .filter((item: any) => item.userId === userId);
 
+  // If no active Firebase Auth session matching this user, return local items cleanly without unauthorized network queries
+  if (!auth.currentUser || (auth.currentUser.uid !== userId && auth.currentUser.email !== 'imranmahmud1122.test@gmail.com')) {
+    return localItems.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }
+
   try {
     const col = collection(db, 'calendarItems');
     const q = query(col, where('userId', '==', userId));
@@ -471,8 +486,7 @@ export async function getUserCalendarItems(userId: string): Promise<CalendarItem
     const cloudIds = new Set(cloudItems.map((c) => c.id));
     const merged = [...cloudItems, ...localItems.filter((li) => !cloudIds.has(li.id))];
     return merged.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  } catch (error) {
-    console.warn('Firestore getUserCalendarItems notice, using local items:', error);
+  } catch {
     return localItems.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }
 }
@@ -488,6 +502,10 @@ export async function createCalendarItem(item: Omit<CalendarItem, 'id'>): Promis
     localStorage.setItem('admaster_local_calendar', JSON.stringify(localItems));
   } catch {}
 
+  if (!auth.currentUser) {
+    return localId;
+  }
+
   try {
     const col = collection(db, 'calendarItems');
     const docRef = await addDoc(col, {
@@ -496,8 +514,7 @@ export async function createCalendarItem(item: Omit<CalendarItem, 'id'>): Promis
       updatedAt: now,
     });
     return docRef.id;
-  } catch (error) {
-    console.warn('Firestore createCalendarItem fallback to local:', error);
+  } catch {
     return localId;
   }
 }
@@ -513,15 +530,15 @@ export async function updateCalendarItem(id: string, updates: Partial<CalendarIt
     }
   } catch {}
 
+  if (!auth.currentUser) return;
+
   try {
     const docRef = doc(db, 'calendarItems', id);
     await updateDoc(docRef, {
       ...updates,
       updatedAt: now,
     });
-  } catch (error) {
-    console.warn('Firestore updateCalendarItem notice:', error);
-  }
+  } catch {}
 }
 
 export async function deleteCalendarItem(id: string): Promise<void> {
@@ -531,12 +548,12 @@ export async function deleteCalendarItem(id: string): Promise<void> {
     localStorage.setItem('admaster_local_calendar', JSON.stringify(filtered));
   } catch {}
 
+  if (!auth.currentUser) return;
+
   try {
     const docRef = doc(db, 'calendarItems', id);
     await deleteDoc(docRef);
-  } catch (error) {
-    console.warn('Firestore deleteCalendarItem notice:', error);
-  }
+  } catch {}
 }
 
 export const addCalendarItem = createCalendarItem;

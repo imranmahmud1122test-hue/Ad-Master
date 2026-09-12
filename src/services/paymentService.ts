@@ -10,7 +10,7 @@ import {
   orderBy,
   limit,
 } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db, auth } from '../lib/firebase';
 import {
   PaymentRecord,
   SubscriptionTier,
@@ -147,23 +147,23 @@ export async function getPlanById(tier: SubscriptionTier): Promise<PlanConfig> {
 export async function getUserPendingPayment(
   userId: string
 ): Promise<PaymentRecord | null> {
-  try {
-    const q = query(
-      collection(db, 'payments'),
-      where('userId', '==', userId),
-      where('paymentStatus', '==', 'PENDING'),
-      limit(1)
-    );
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-      const data = snap.docs[0].data();
-      return {
-        paymentId: snap.docs[0].id,
-        ...data,
-      } as PaymentRecord;
-    }
-  } catch (err) {
-    console.warn('Error querying pending payments:', err);
+  if (auth.currentUser && (auth.currentUser.uid === userId || auth.currentUser.email === 'imranmahmud1122.test@gmail.com')) {
+    try {
+      const q = query(
+        collection(db, 'payments'),
+        where('userId', '==', userId),
+        where('paymentStatus', '==', 'PENDING'),
+        limit(1)
+      );
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const data = snap.docs[0].data();
+        return {
+          paymentId: snap.docs[0].id,
+          ...data,
+        } as PaymentRecord;
+      }
+    } catch {}
   }
 
   // Local storage fallback for seamless offline-first experience
@@ -187,20 +187,20 @@ export async function getUserPaymentHistory(
   userId: string
 ): Promise<PaymentRecord[]> {
   const payments: PaymentRecord[] = [];
-  try {
-    const q = query(
-      collection(db, 'payments'),
-      where('userId', '==', userId)
-    );
-    const snap = await getDocs(q);
-    snap.forEach((docSnap) => {
-      payments.push({
-        paymentId: docSnap.id,
-        ...docSnap.data(),
-      } as PaymentRecord);
-    });
-  } catch (err) {
-    console.warn('Error querying user payments:', err);
+  if (auth.currentUser && (auth.currentUser.uid === userId || auth.currentUser.email === 'imranmahmud1122.test@gmail.com')) {
+    try {
+      const q = query(
+        collection(db, 'payments'),
+        where('userId', '==', userId)
+      );
+      const snap = await getDocs(q);
+      snap.forEach((docSnap) => {
+        payments.push({
+          paymentId: docSnap.id,
+          ...docSnap.data(),
+        } as PaymentRecord);
+      });
+    } catch {}
   }
 
   // Merge with local records if any

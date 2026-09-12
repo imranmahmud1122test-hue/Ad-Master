@@ -3,35 +3,6 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <script>
-      (function() {
-        window.addEventListener('unhandledrejection', function(event) {
-          var reason = event.reason;
-          var msg = (reason && (reason.message || reason.toString())) || String(reason || '');
-          if (msg.toLowerCase().indexOf('websocket') !== -1 || msg.toLowerCase().indexOf('vite') !== -1) {
-            event.preventDefault();
-            if (event.stopImmediatePropagation) event.stopImmediatePropagation();
-          }
-        }, true);
-
-        window.addEventListener('error', function(event) {
-          var msg = event.message || (event.error && event.error.message) || '';
-          if (msg.toLowerCase().indexOf('websocket') !== -1 || msg.toLowerCase().indexOf('vite') !== -1) {
-            event.preventDefault();
-            if (event.stopImmediatePropagation) event.stopImmediatePropagation();
-          }
-        }, true);
-
-        var origError = console.error;
-        console.error = function() {
-          var str = arguments[0] ? String(arguments[0]) : '';
-          if (str.indexOf('[vite] failed to connect to websocket') !== -1 || str.indexOf('WebSocket closed without opened') !== -1) {
-            return;
-          }
-          origError.apply(console, arguments);
-        };
-      })();
-    </script>
     <title>AdMaster AI — Create Better Content. Plan Smarter Ads. Grow Faster.</title>
     <meta name="description" content="Create Better Content. Plan Smarter Ads. Grow Faster. AI-powered marketing assistant for Facebook and social ads, video scripts, hooks, captions, campaigns, and ad performance analysis." />
     <meta property="og:title" content="AdMaster AI — Create Better Content. Plan Smarter Ads. Grow Faster." />
