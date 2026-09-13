@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
-import { Badge, EmptyState } from '../../components/ui/FeedbackComponents';
+import { Badge, EmptyState, ConfirmModal } from '../../components/ui/FeedbackComponents';
 import { Project } from '../../types';
 import {
   getUserProjects,
@@ -53,17 +53,24 @@ export const ProjectsPage: React.FC = () => {
     loadProjects();
   }, [profile?.uid]);
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (window.confirm('Are you sure you want to delete this project?')) {
-      try {
-        await deleteProject(id);
-        setProjects((prev) => prev.filter((p) => p.id !== id));
-        success('Project deleted.');
-      } catch (err) {
-        error('Failed to delete project.');
-      }
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+
+  const confirmDelete = async () => {
+    if (!deleteTargetId) return;
+    try {
+      await deleteProject(deleteTargetId);
+      setProjects((prev) => prev.filter((p) => p.id !== deleteTargetId));
+      success('Project deleted.');
+    } catch (err) {
+      error('Failed to delete project.');
+    } finally {
+      setDeleteTargetId(null);
     }
+  };
+
+  const handleDelete = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDeleteTargetId(id);
   };
 
   const handleDuplicate = async (p: Project, e: React.MouseEvent) => {
@@ -249,6 +256,15 @@ export const ProjectsPage: React.FC = () => {
           ))}
         </div>
       )}
+      <ConfirmModal
+        isOpen={!!deleteTargetId}
+        onClose={() => setDeleteTargetId(null)}
+        onConfirm={confirmDelete}
+        title="Delete Project"
+        message="Are you sure you want to permanently delete this project? This action cannot be undone."
+        confirmText="Delete Project"
+        confirmVariant="danger"
+      />
     </div>
   );
 };

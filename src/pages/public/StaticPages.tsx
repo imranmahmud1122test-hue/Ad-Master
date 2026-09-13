@@ -1,42 +1,48 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from '../../context/RouterContext';
 import { useAuth } from '../../context/AuthContext';
 import { CheckCircle2, Zap, HelpCircle, ShieldCheck } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/FeedbackComponents';
 import { DEFAULT_PLANS } from '../../services/firestoreService';
+import { getPlanConfigs } from '../../services/paymentService';
+import { BkashPaymentModal } from '../../components/payment/BkashPaymentModal';
+import { SubscriptionTier, PlanConfig } from '../../types';
 import { useToast } from '../../context/ToastContext';
-import { updateUserProfile } from '../../services/firestoreService';
 
 export const PricingPage: React.FC = () => {
   const { navigate } = useRouter();
-  const { profile, currentUser, refreshProfile } = useAuth();
-  const { success, info } = useToast();
+  const { profile, currentUser } = useAuth();
+  const { info } = useToast();
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
+  const [plans, setPlans] = useState<PlanConfig[]>(DEFAULT_PLANS);
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
+  const [upgradePlan, setUpgradePlan] = useState<SubscriptionTier>('PRO');
 
-  const handleSelectPlan = async (tier: 'FREE' | 'PRO' | 'BUSINESS') => {
+  useEffect(() => {
+    getPlanConfigs().then((p) => {
+      if (p && p.length > 0) setPlans(p);
+    });
+  }, []);
+
+  const handleSelectPlan = async (tier: SubscriptionTier) => {
     if (!currentUser && !profile) {
       navigate('/register');
       return;
     }
 
-    if (profile?.subscription === tier) {
-      info(`You are currently on the ${tier} plan.`);
+    if (tier === 'FREE') {
+      if (profile?.subscription === 'FREE') {
+        info('You are currently on the Free Starter plan.');
+        return;
+      }
+      navigate('/dashboard');
       return;
     }
 
-    // Update user profile in Firestore
-    if (profile) {
-      const additionalCredits =
-        tier === 'BUSINESS' ? 1200 : tier === 'PRO' ? 350 : 50;
-      await updateUserProfile(profile.uid, {
-        subscription: tier,
-        credits: additionalCredits,
-      });
-      await refreshProfile();
-      success(`Successfully updated subscription to ${tier}! You now have ${additionalCredits} credits.`);
-      navigate('/dashboard');
-    }
+    // For paid plans, launch the bKash payment & verification modal
+    setUpgradePlan(tier);
+    setUpgradeModalOpen(true);
   };
 
   return (
@@ -50,8 +56,8 @@ export const PricingPage: React.FC = () => {
           Invest in High-Performing Social Ads
         </h1>
         <p className="text-base text-slate-600 mt-4 leading-relaxed">
-          Choose a plan that fits your business stage. Every plan includes full access to our
-          video script engine and campaign blueprints.
+          Upgrade your plan seamlessly using bKash. Every plan includes full access to our
+          video script engine, Facebook ad analyzers, and campaign blueprints.
         </p>
 
         {/* Toggle */}
@@ -84,7 +90,7 @@ export const PricingPage: React.FC = () => {
 
       {/* Plans Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto items-stretch">
-        {DEFAULT_PLANS.map((plan) => {
+        {plans.map((plan) => {
           const isCurrent = profile?.subscription === plan.id;
           const displayPrice =
             billingCycle === 'annual' && plan.price > 0
@@ -127,17 +133,22 @@ export const PricingPage: React.FC = () => {
                 {/* Price Display */}
                 <div className="mb-6 pb-6 border-b border-slate-100">
                   <div className="flex items-baseline gap-1">
-                    <span className="text-4xl sm:text-5xl font-extrabold text-slate-900 font-['Space_Grotesk',sans-serif]">
-                      ${displayPrice}
+                    <span className="text-3xl sm:text-4xl font-extrabold text-slate-900 font-['Space_Grotesk',sans-serif]">
+                      ৳{displayPrice.toLocaleString()}
                     </span>
                     <span className="text-xs text-slate-500 font-medium">
-                      /{plan.price === 0 ? 'forever' : 'month'}
+                      BDT /{plan.price === 0 ? 'forever' : 'month'}
                     </span>
                   </div>
                   {billingCycle === 'annual' && plan.price > 0 && (
                     <span className="text-[11px] text-emerald-600 font-semibold block mt-1">
-                      Billed annually (billed as ${displayPrice * 12}/yr)
+                      Billed annually (৳{(displayPrice * 12).toLocaleString()} BDT/yr)
                     </span>
+                  )}
+                  {plan.price > 0 && (
+                    <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-pink-50 text-[#E2136E] text-[11px] font-bold border border-pink-200">
+                      <span>bKash Instant Upgrade</span>
+                    </div>
                   )}
                 </div>
 
@@ -169,14 +180,18 @@ export const PricingPage: React.FC = () => {
               <Button
                 variant={plan.popular ? 'primary' : 'outline'}
                 size="md"
-                className="w-full"
+                className={`w-full ${
+                  plan.id !== 'FREE'
+                    ? 'bg-gradient-to-r from-[#D12053] to-[#E2136E] hover:from-[#ba1647] hover:to-[#cc0f62] text-white border-0 shadow-sm'
+                    : ''
+                }`}
                 onClick={() => handleSelectPlan(plan.id)}
               >
                 {isCurrent
                   ? 'Your Active Plan'
                   : plan.id === 'FREE'
                   ? 'Get Started Free'
-                  : `Upgrade to ${plan.name}`}
+                  : `Upgrade with bKash (৳${plan.price.toLocaleString()} BDT)`}
               </Button>
             </div>
           );
@@ -235,10 +250,23 @@ export const PricingPage: React.FC = () => {
                 <td className="py-3 text-center text-emerald-600">&check;</td>
                 <td className="py-3 text-center text-emerald-600 font-bold">&check; Complete Access</td>
               </tr>
+              <tr>
+                <td className="py-3 font-medium">bKash Manual Verification</td>
+                <td className="py-3 text-center text-slate-400">&mdash;</td>
+                <td className="py-3 text-center text-emerald-600 font-semibold">&check; Instant Review</td>
+                <td className="py-3 text-center text-emerald-600 font-bold">&check; Priority VIP Review</td>
+              </tr>
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Upgrade Modal */}
+      <BkashPaymentModal
+        isOpen={upgradeModalOpen}
+        onClose={() => setUpgradeModalOpen(false)}
+        initialPlan={upgradePlan}
+      />
     </div>
   );
 };

@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
-import { Badge } from '../../components/ui/FeedbackComponents';
+import { Badge, ConfirmModal } from '../../components/ui/FeedbackComponents';
 import { Project } from '../../types';
 import {
   getProjectById,
@@ -38,6 +38,7 @@ export const ProjectDetailPage: React.FC<{ projectId: string }> = ({ projectId }
   const [name, setName] = useState('');
   const [summary, setSummary] = useState('');
   const [copied, setCopied] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchProject = async () => {
@@ -70,16 +71,21 @@ export const ProjectDetailPage: React.FC<{ projectId: string }> = ({ projectId }
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (!project) return;
-    if (window.confirm('Are you sure you want to delete this project?')) {
-      try {
-        await deleteProject(project.id);
-        success('Project deleted.');
-        navigate('/projects');
-      } catch (err) {
-        error('Failed to delete.');
-      }
+    setDeleteModalOpen(true);
+  };
+
+  const confirmDeleteProject = async () => {
+    if (!project) return;
+    try {
+      await deleteProject(project.id);
+      success('Project deleted.');
+      navigate('/projects');
+    } catch (err) {
+      error('Failed to delete.');
+    } finally {
+      setDeleteModalOpen(false);
     }
   };
 
@@ -323,6 +329,16 @@ export const ProjectDetailPage: React.FC<{ projectId: string }> = ({ projectId }
           </pre>
         </Card>
       )}
+
+      <ConfirmModal
+        isOpen={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        onConfirm={confirmDeleteProject}
+        title="Delete Project"
+        message="Are you sure you want to permanently delete this project? This action cannot be undone."
+        confirmText="Delete Project"
+        confirmVariant="danger"
+      />
     </div>
   );
 };

@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, CardContent } from '../../components/ui/Card';
-import { Badge, EmptyState } from '../../components/ui/FeedbackComponents';
+import { Badge, EmptyState, ConfirmModal } from '../../components/ui/FeedbackComponents';
 import { Modal } from '../../components/ui/Modal';
 import { Input, Textarea, Select } from '../../components/ui/Input';
 import { CalendarItem } from '../../types';
@@ -133,17 +133,24 @@ export const ContentCalendarPage: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (window.confirm('Delete this scheduled item?')) {
-      try {
-        await deleteCalendarItem(id);
-        setItems((prev) => prev.filter((i) => i.id !== id));
-        success('Item removed.');
-      } catch (err) {
-        error('Failed to delete.');
-      }
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+
+  const confirmDeleteItem = async () => {
+    if (!deleteTargetId) return;
+    try {
+      await deleteCalendarItem(deleteTargetId);
+      setItems((prev) => prev.filter((i) => i.id !== deleteTargetId));
+      success('Item removed.');
+    } catch (err) {
+      error('Failed to delete.');
+    } finally {
+      setDeleteTargetId(null);
     }
+  };
+
+  const handleDelete = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDeleteTargetId(id);
   };
 
   const handleStatusToggle = async (item: CalendarItem, newStatus: 'Draft' | 'Planned' | 'Published') => {
@@ -541,6 +548,16 @@ export const ContentCalendarPage: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      <ConfirmModal
+        isOpen={!!deleteTargetId}
+        onClose={() => setDeleteTargetId(null)}
+        onConfirm={confirmDeleteItem}
+        title="Delete Calendar Item"
+        message="Are you sure you want to delete this scheduled post from your calendar?"
+        confirmText="Delete"
+        confirmVariant="danger"
+      />
     </div>
   );
 };

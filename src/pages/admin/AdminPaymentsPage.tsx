@@ -299,9 +299,14 @@ export const AdminPaymentsPage: React.FC = () => {
                       ৳{item.amount?.toLocaleString()} BDT
                     </td>
                     <td className="px-5 py-3.5">
-                      <span className="font-mono font-bold text-xs bg-slate-100 text-slate-800 px-2 py-0.5 rounded border border-slate-200">
+                      <div className="font-mono font-bold text-xs bg-slate-100 text-slate-800 px-2 py-0.5 rounded border border-slate-200 inline-block">
                         {item.transactionId}
-                      </span>
+                      </div>
+                      {item.senderNumber && (
+                        <div className="text-[11px] text-slate-500 font-mono mt-0.5">
+                          From: {item.senderNumber}
+                        </div>
+                      )}
                     </td>
                     <td className="px-5 py-3.5 text-xs text-slate-500">
                       {new Date(item.submittedAt).toLocaleDateString(undefined, {
@@ -425,8 +430,17 @@ export const AdminPaymentsPage: React.FC = () => {
               </div>
 
               <div className="p-3 bg-white rounded-lg border border-slate-200">
+                <span className="text-slate-500 block text-xs">Sender bKash Wallet</span>
+                <strong className="text-slate-800 text-sm font-mono">
+                  {selectedPayment.senderNumber || 'Not specified'}
+                </strong>
+              </div>
+
+              <div className="p-3 bg-white rounded-lg border border-slate-200">
                 <span className="text-slate-500 block text-xs">bKash Receiving Number</span>
-                <strong className="text-slate-800 text-sm font-mono">{BKASH_RECEIVER_NUMBER}</strong>
+                <strong className="text-slate-800 text-sm font-mono">
+                  {selectedPayment.receiverNumber || BKASH_RECEIVER_NUMBER}
+                </strong>
               </div>
 
               <div className="col-span-2 p-3 bg-white rounded-lg border border-slate-200">

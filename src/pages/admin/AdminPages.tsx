@@ -25,6 +25,7 @@ import { Card, CardHeader, CardContent } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/FeedbackComponents';
 import { Modal } from '../../components/ui/Modal';
 import { Input, Textarea, Select } from '../../components/ui/Input';
+import { safeConfirm } from '../../lib/utils';
 import {
   UserProfile,
   Project,
@@ -348,7 +349,7 @@ export const AdminUsersPage: React.FC = () => {
       error('Cannot delete the primary Super Administrator account.');
       return;
     }
-    if (window.confirm(`Are you sure you want to permanently delete user account "${u.email}"? This action cannot be undone.`)) {
+    if (safeConfirm(`Are you sure you want to permanently delete user account "${u.email}"? This action cannot be undone.`)) {
       try {
         await deleteUserProfile(u.uid);
         setUsers((prev) => prev.filter((user) => user.uid !== u.uid));
@@ -611,7 +612,7 @@ export const AdminTemplatesPage: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('Delete this template?')) {
+    if (safeConfirm('Delete this template?')) {
       try {
         await deleteTemplate(id);
         setTemplates((prev) => prev.filter((t) => t.id !== id));
@@ -806,7 +807,7 @@ export const AdminLessonsPage: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('Delete this lesson?')) {
+    if (safeConfirm('Delete this lesson?')) {
       try {
         await deleteLesson(id);
         setLessons((prev) => prev.filter((l) => l.id !== id));

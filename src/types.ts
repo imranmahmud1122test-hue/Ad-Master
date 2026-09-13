@@ -237,6 +237,15 @@ export interface PlanConfig {
   active?: boolean;
 }
 
+export interface BkashAccountConfig {
+  receiverNumber: string;
+  accountType: 'Personal' | 'Merchant' | 'Agent';
+  accountName?: string;
+  instructions?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
 export interface PaymentRecord {
   paymentId: string;
   userId: string;
@@ -247,6 +256,7 @@ export interface PaymentRecord {
   currency?: string;
   paymentMethod: 'BKASH';
   receiverNumber: string;
+  senderNumber?: string;
   transactionId: string;
   paymentStatus: PaymentStatus;
   status?: PaymentStatus;

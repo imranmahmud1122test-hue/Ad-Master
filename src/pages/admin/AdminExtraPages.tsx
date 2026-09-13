@@ -15,11 +15,23 @@ import {
   Zap,
   Trash2,
   Eye,
+  Phone,
+  Save,
+  Settings,
+  HelpCircle,
 } from 'lucide-react';
 import { DEFAULT_PLANS, getAllProjectsAdmin, deleteProject } from '../../services/firestoreService';
-import { Project, PlanConfig } from '../../types';
-import { getPlanConfigs, updatePlanConfigs, BKASH_RECEIVER_NUMBER } from '../../services/paymentService';
+import { Project, PlanConfig, BkashAccountConfig } from '../../types';
+import {
+  getPlanConfigs,
+  updatePlanConfigs,
+  getBkashAccountConfig,
+  updateBkashAccountConfig,
+  DEFAULT_BKASH_CONFIG,
+  BKASH_RECEIVER_NUMBER,
+} from '../../services/paymentService';
 import { useAuth } from '../../context/AuthContext';
+import { safeConfirm } from '../../lib/utils';
 
 export const AdminSubscriptionsPage: React.FC = () => {
   const { profile } = useAuth();
@@ -30,20 +42,61 @@ export const AdminSubscriptionsPage: React.FC = () => {
   const [editingPlan, setEditingPlan] = useState<PlanConfig | null>(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
 
+  // bKash Account Configuration State
+  const [bkashConfig, setBkashConfig] = useState<BkashAccountConfig>(DEFAULT_BKASH_CONFIG);
+  const [bkashNumberInput, setBkashNumberInput] = useState(DEFAULT_BKASH_CONFIG.receiverNumber);
+  const [bkashAccountType, setBkashAccountType] = useState<'Personal' | 'Merchant' | 'Agent'>('Personal');
+  const [bkashAccountName, setBkashAccountName] = useState(DEFAULT_BKASH_CONFIG.accountName || '');
+  const [bkashInstructions, setBkashInstructions] = useState(DEFAULT_BKASH_CONFIG.instructions || '');
+  const [savingBkash, setSavingBkash] = useState(false);
+
   useEffect(() => {
     async function load() {
       setLoading(true);
       try {
-        const loaded = await getPlanConfigs();
-        setPlans(loaded);
+        const [loadedPlans, loadedBkash] = await Promise.all([
+          getPlanConfigs(),
+          getBkashAccountConfig(),
+        ]);
+        setPlans(loadedPlans);
+        setBkashConfig(loadedBkash);
+        setBkashNumberInput(loadedBkash.receiverNumber);
+        setBkashAccountType(loadedBkash.accountType || 'Personal');
+        setBkashAccountName(loadedBkash.accountName || 'AdMaster AI Official');
+        setBkashInstructions(loadedBkash.instructions || '');
       } catch (err) {
-        console.error(err);
+        console.error('Error loading plans & bkash config:', err);
       } finally {
         setLoading(false);
       }
     }
     load();
   }, []);
+
+  const handleSaveBkashConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bkashNumberInput.trim()) {
+      toastError('Please enter a valid bKash receiver phone number.');
+      return;
+    }
+
+    setSavingBkash(true);
+    try {
+      const updated: BkashAccountConfig = {
+        receiverNumber: bkashNumberInput.trim(),
+        accountType: bkashAccountType,
+        accountName: bkashAccountName.trim() || 'AdMaster AI Official',
+        instructions: bkashInstructions.trim(),
+      };
+      await updateBkashAccountConfig(updated, profile?.email || 'admin');
+      setBkashConfig(updated);
+      success(`bKash receiver account set to ${updated.receiverNumber} (${updated.accountType}) successfully!`);
+    } catch (err: any) {
+      toastError(err.message || 'Failed to update bKash account.');
+    } finally {
+      setSavingBkash(false);
+    }
+  };
 
   const handleSavePlan = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,7 +116,7 @@ export const AdminSubscriptionsPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="space-y-8 max-w-6xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-200">
         <div>
           <div className="flex items-center gap-2">
@@ -71,59 +124,180 @@ export const AdminSubscriptionsPage: React.FC = () => {
               Subscription Plans &amp; bKash Pricing
             </h1>
             <Badge variant="pink" size="sm">
-              bKash Receiver: {BKASH_RECEIVER_NUMBER}
+              Receiver: {bkashConfig.receiverNumber}
             </Badge>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Configure live monetization tiers, prices (BDT), AI generation credit caps, and features.
+            Configure live monetization tiers, prices in BDT (৳), and receiver bKash payment account credentials.
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {plans.map((plan) => (
-          <Card key={plan.id} className="p-6 flex flex-col justify-between border-slate-200 shadow-sm hover:shadow-md transition">
+      {/* bKash Receiver Account Configuration Panel */}
+      <div className="bg-gradient-to-br from-pink-50/70 via-white to-rose-50/50 rounded-2xl border-2 border-pink-200/80 p-5 sm:p-6 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 mb-5 border-b border-pink-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#E2136E] text-white flex items-center justify-center font-extrabold text-xl shadow-xs">
+              ৳
+            </div>
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-base font-bold text-slate-900">{plan.name}</h3>
-                <Badge variant={plan.popular ? 'purple' : 'slate'} size="sm">
-                  {plan.id}
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                bKash Receiver Account Settings
+                <Badge variant="emerald" size="sm">
+                  Active
                 </Badge>
-              </div>
+              </h2>
+              <p className="text-xs text-slate-500">
+                This account number is shown to all users when upgrading to Pro or Business.
+              </p>
+            </div>
+          </div>
 
-              <div className="text-3xl font-extrabold text-slate-900 my-4 font-['Space_Grotesk',sans-serif]">
-                ৳{plan.price.toLocaleString()}
-                <span className="text-xs text-slate-400 font-normal"> BDT / {plan.billing}</span>
-              </div>
+          <div className="text-right">
+            <span className="text-[11px] font-mono font-bold text-[#E2136E] bg-white px-3 py-1.5 rounded-lg border border-pink-200 block shadow-2xs">
+              Live Receiver: {bkashConfig.receiverNumber} ({bkashConfig.accountType})
+            </span>
+          </div>
+        </div>
 
-              <div className="p-3 bg-blue-50 rounded-xl text-xs font-semibold text-blue-800 mb-4 flex items-center justify-between">
-                <span>Monthly AI Credits:</span>
-                <span className="text-sm font-bold text-blue-900">{plan.monthlyCredits.toLocaleString()}</span>
-              </div>
-
-              <ul className="space-y-2 text-xs text-slate-600 mb-6">
-                {plan.features.map((f, i) => (
-                  <li key={i} className="flex items-center gap-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                    <span>{f}</span>
-                  </li>
-                ))}
-              </ul>
+        <form onSubmit={handleSaveBkashConfig} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5 flex items-center gap-1.5">
+                <Phone className="w-3.5 h-3.5 text-[#E2136E]" />
+                bKash Phone Number <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={bkashNumberInput}
+                onChange={(e) => setBkashNumberInput(e.target.value)}
+                placeholder="e.g. 01859340742"
+                className="w-full px-3.5 py-2.5 text-sm font-mono font-bold text-slate-900 bg-white rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#E2136E] focus:border-transparent"
+              />
+              <span className="text-[10px] text-slate-400 mt-1 block">
+                Standard 11-digit Bangladeshi mobile number
+              </span>
             </div>
 
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                Account Type <span className="text-rose-500">*</span>
+              </label>
+              <select
+                value={bkashAccountType}
+                onChange={(e) => setBkashAccountType(e.target.value as any)}
+                className="w-full px-3.5 py-2.5 text-sm font-semibold text-slate-900 bg-white rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#E2136E] focus:border-transparent"
+              >
+                <option value="Personal">Personal (Send Money)</option>
+                <option value="Merchant">Merchant (Payment)</option>
+                <option value="Agent">Agent (Cash In)</option>
+              </select>
+              <span className="text-[10px] text-slate-400 mt-1 block">
+                Determines the instruction shown to users (e.g. Send Money vs Payment)
+              </span>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                Account Display Name
+              </label>
+              <input
+                type="text"
+                value={bkashAccountName}
+                onChange={(e) => setBkashAccountName(e.target.value)}
+                placeholder="e.g. AdMaster AI Official"
+                className="w-full px-3.5 py-2.5 text-sm font-medium text-slate-900 bg-white rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#E2136E] focus:border-transparent"
+              />
+              <span className="text-[10px] text-slate-400 mt-1 block">
+                Shown to subscribers to verify identity before transferring
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+              Custom Instructions for Subscribers (Optional)
+            </label>
+            <input
+              type="text"
+              value={bkashInstructions}
+              onChange={(e) => setBkashInstructions(e.target.value)}
+              placeholder="e.g. Send Money from personal bKash, enter your account number as reference, submit TrxID."
+              className="w-full px-3.5 py-2 text-xs text-slate-800 bg-white rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#E2136E] focus:border-transparent"
+            />
+          </div>
+
+          <div className="flex items-center justify-between pt-2">
+            <p className="text-xs text-slate-500">
+              Changes take effect immediately across all upgrade modals and payment forms.
+            </p>
             <Button
-              variant="outline"
+              type="submit"
+              variant="primary"
               size="sm"
-              className="w-full mt-2 border-slate-300 hover:bg-slate-50"
-              onClick={() => {
-                setEditingPlan({ ...plan });
-                setEditModalOpen(true);
-              }}
+              loading={savingBkash}
+              leftIcon={<Save className="w-3.5 h-3.5" />}
+              className="bg-[#E2136E] hover:bg-[#c90f61] text-white border-0 shadow-sm"
             >
-              Edit Pricing &amp; Features
+              Save bKash Account
             </Button>
-          </Card>
-        ))}
+          </div>
+        </form>
+      </div>
+
+      {/* Subscription Plans Tiers */}
+      <div>
+        <div className="mb-4">
+          <h2 className="text-lg font-bold text-slate-900">Subscription Plans (BDT ৳)</h2>
+          <p className="text-xs text-slate-500">Click &apos;Edit Pricing &amp; Features&apos; to change tier prices or monthly credits.</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {plans.map((plan) => (
+            <Card key={plan.id} className="p-6 flex flex-col justify-between border-slate-200 shadow-sm hover:shadow-md transition">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-base font-bold text-slate-900">{plan.name}</h3>
+                  <Badge variant={plan.popular ? 'purple' : 'slate'} size="sm">
+                    {plan.id}
+                  </Badge>
+                </div>
+
+                <div className="text-3xl font-extrabold text-slate-900 my-4 font-['Space_Grotesk',sans-serif]">
+                  ৳{plan.price.toLocaleString()}
+                  <span className="text-xs text-slate-400 font-normal"> BDT / {plan.billing}</span>
+                </div>
+
+                <div className="p-3 bg-blue-50 rounded-xl text-xs font-semibold text-blue-800 mb-4 flex items-center justify-between">
+                  <span>Monthly AI Credits:</span>
+                  <span className="text-sm font-bold text-blue-900">{plan.monthlyCredits.toLocaleString()}</span>
+                </div>
+
+                <ul className="space-y-2 text-xs text-slate-600 mb-6">
+                  {plan.features.map((f, i) => (
+                    <li key={i} className="flex items-center gap-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full mt-2 border-slate-300 hover:bg-slate-50"
+                onClick={() => {
+                  setEditingPlan({ ...plan });
+                  setEditModalOpen(true);
+                }}
+              >
+                Edit Pricing &amp; Features
+              </Button>
+            </Card>
+          ))}
+        </div>
       </div>
 
       {/* Edit Plan Modal */}
@@ -322,7 +496,7 @@ export const AdminProjectsAuditPage: React.FC = () => {
   }, []);
 
   const handleDelete = async (p: Project) => {
-    if (window.confirm(`Permanently delete project "${p.name}"? This cannot be undone.`)) {
+    if (safeConfirm(`Permanently delete project "${p.name}"? This cannot be undone.`)) {
       try {
         await deleteProject(p.id);
         setProjects((prev) => prev.filter((proj) => proj.id !== p.id));

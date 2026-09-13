@@ -6,7 +6,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const app = express();
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = 3000;
 
 app.use(express.json({ limit: '10mb' }));
 
@@ -21,6 +21,87 @@ function getGeminiClient(): GoogleGenAI {
     aiClient = new GoogleGenAI({ apiKey });
   }
   return aiClient;
+}
+
+// Helper to call OpenAI ChatGPT if configured
+async function callOpenAI(promptText: string): Promise<string> {
+  const openAiKey = process.env.OPENAI_API_KEY;
+  if (!openAiKey) {
+    throw new Error('OPENAI_API_KEY not configured.');
+  }
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${openAiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'user',
+          content: promptText,
+        },
+      ],
+      temperature: 0.7,
+      response_format: { type: 'json_object' },
+    }),
+  });
+
+  const data = (await response.json()) as any;
+  if (!response.ok || data.error) {
+    throw new Error(data.error?.message || 'OpenAI chat completion failed.');
+  }
+
+  return data.choices?.[0]?.message?.content || '';
+}
+
+// Multi-engine AI caller: prioritizes Google Gemini (gemini-3.6-flash -> gemini-3.8-flash) and falls back to OpenAI ChatGPT if available
+async function callGemini(contents: any[], config?: any): Promise<string> {
+  let lastErr: any = null;
+
+  // 1. Primary: Google Gemini with multi-model fallback
+  try {
+    const ai = getGeminiClient();
+    const candidateModels = ['gemini-3.6-flash', 'gemini-3.8-flash'];
+
+    for (const model of candidateModels) {
+      try {
+        const response = await ai.models.generateContent({
+          model,
+          contents,
+          config,
+        });
+        if (response && response.text) {
+          return response.text;
+        }
+      } catch (err: any) {
+        console.warn(`[AdMaster AI] Gemini model ${model} generation failed, attempting fallback:`, err?.message || err);
+        lastErr = err;
+      }
+    }
+  } catch (err: any) {
+    console.warn('[AdMaster AI] Gemini initialization error:', err?.message || err);
+    lastErr = err;
+  }
+
+  // 2. Secondary fallback: OpenAI ChatGPT (if OPENAI_API_KEY is configured in environment)
+  if (process.env.OPENAI_API_KEY) {
+    try {
+      const userText = contents?.[0]?.parts?.map((p: any) => p.text).join('\n') || '';
+      console.log('[AdMaster AI] Routing request to secondary OpenAI provider...');
+      const openAiText = await callOpenAI(userText);
+      if (openAiText) {
+        return openAiText;
+      }
+    } catch (openAiErr: any) {
+      console.warn('[AdMaster AI] OpenAI fallback generation failed:', openAiErr?.message || openAiErr);
+      lastErr = openAiErr;
+    }
+  }
+
+  throw lastErr || new Error('Failed to generate content with AI models.');
 }
 
 // Clean JSON response helper from Gemini text
@@ -50,19 +131,19 @@ app.get('/api/health', (req, res) => {
 // -------------------------------------------------------------
 app.post('/api/ai/video-script', async (req, res) => {
   try {
-    const {
-      product,
-      targetAudience,
-      platform = 'Facebook',
-      videoFormat = '9:16',
-      videoLength = '30 seconds',
-      tone = 'Promotional',
-      callToAction = 'Shop Now',
-      businessName,
-      businessCategory,
-    } = req.body;
+    const product = req.body.product || req.body.productName || '';
+    const productDesc = req.body.productDescription || '';
+    const targetAudience = req.body.targetAudience || 'General online consumers';
+    const platform = req.body.platform || 'Facebook';
+    const videoFormat = req.body.videoFormat || req.body.format || '9:16';
+    const videoLength = req.body.videoLength || req.body.length || '30s';
+    const tone = req.body.tone || 'Promotional';
+    const callToAction = req.body.callToAction || req.body.cta || 'Shop Now';
+    const mainBenefit = req.body.mainBenefit || '';
+    const businessName = req.body.businessName || '';
+    const businessCategory = req.body.businessCategory || '';
 
-    if (!product || !targetAudience) {
+    if (!product && !productDesc) {
       return res.status(400).json({
         error: 'Please provide what you are promoting and your target audience.',
       });
@@ -98,8 +179,9 @@ Output MUST be strictly valid JSON without markdown wrapping matching this struc
 
     const prompt = `Create a ${videoLength} high-converting ${platform} ad script (${videoFormat} format).
 Business: ${businessName || 'Business'} (${businessCategory || 'Commerce'})
-Product / Service: ${product}
+Product / Service: ${product} ${productDesc ? `— ${productDesc}` : ''}
 Target Audience: ${targetAudience}
+Main Benefit: ${mainBenefit || 'Immediate transformation and high value'}
 Tone of Voice: ${tone}
 Desired CTA: ${callToAction}
 Format: ${videoFormat}
@@ -107,21 +189,21 @@ Length: ${videoLength}
 
 Ensure the scenes span the entire ${videoLength} duration realistically with 3 to 5 scenes following the Hook -> Problem/Agitation -> Solution/Benefit -> Social Proof -> CTA formula.`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [
-        { role: 'user', parts: [{ text: `${systemPrompt}\n\nTask:\n${prompt}` }] },
-      ],
-      config: {
+    const text = await callGemini(
+      [{ role: 'user', parts: [{ text: `${systemPrompt}\n\nTask:\n${prompt}` }] }],
+      {
         temperature: 0.7,
         responseMimeType: 'application/json',
-      },
-    });
+      }
+    );
 
-    const text = response.text || '';
     const parsed = extractJsonFromText(text);
 
-    return res.json({ success: true, data: parsed });
+    return res.json({
+      success: true,
+      ...parsed,
+      data: parsed,
+    });
   } catch (error: any) {
     console.error('Error generating video script:', error);
     return res.status(500).json({
@@ -137,20 +219,16 @@ Ensure the scenes span the entire ${videoLength} duration realistically with 3 t
 // -------------------------------------------------------------
 app.post('/api/ai/content', async (req, res) => {
   try {
-    const {
-      product,
-      audience,
-      mainBenefit,
-      offer,
-      tone = 'Conversational',
-      goal = 'Sales',
-    } = req.body;
+    const product = req.body.product || req.body.productName || '';
+    const audience = req.body.audience || req.body.targetAudience || 'Potential customers';
+    const mainBenefit = req.body.mainBenefit || 'High quality and fast results';
+    const offer = req.body.offer || 'Limited time availability';
+    const tone = req.body.tone || 'Conversational';
+    const goal = req.body.goal || 'Sales';
 
     if (!product) {
       return res.status(400).json({ error: 'Product or service description is required.' });
     }
-
-    const ai = getGeminiClient();
 
     const systemPrompt = `You are an elite direct-response marketing copywriter for social media and Facebook ads.
 Produce punchy, compelling marketing variations for the user's product or service.
@@ -168,25 +246,26 @@ Output MUST be strictly valid JSON matching:
 
     const prompt = `Generate high-converting marketing content:
 Product / Service: ${product}
-Target Audience: ${audience || 'Potential customers'}
-Main Benefit: ${mainBenefit || 'High quality and fast results'}
-Special Offer / Promotion: ${offer || 'Limited time availability'}
+Target Audience: ${audience}
+Main Benefit: ${mainBenefit}
+Special Offer / Promotion: ${offer}
 Tone: ${tone}
 Goal: ${goal}`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [
-        { role: 'user', parts: [{ text: `${systemPrompt}\n\nTask:\n${prompt}` }] },
-      ],
-      config: {
+    const text = await callGemini(
+      [{ role: 'user', parts: [{ text: `${systemPrompt}\n\nTask:\n${prompt}` }] }],
+      {
         temperature: 0.7,
         responseMimeType: 'application/json',
-      },
-    });
+      }
+    );
 
-    const parsed = extractJsonFromText(response.text || '{}');
-    return res.json({ success: true, data: parsed });
+    const parsed = extractJsonFromText(text);
+    return res.json({
+      success: true,
+      ...parsed,
+      data: parsed,
+    });
   } catch (error: any) {
     console.error('Error generating content:', error);
     return res.status(500).json({
@@ -200,21 +279,18 @@ Goal: ${goal}`;
 // -------------------------------------------------------------
 app.post('/api/ai/ad-planner', async (req, res) => {
   try {
-    const {
-      campaignObjective,
-      product,
-      websiteUrl,
-      targetAudience,
-      budget,
-      creative,
-      cta,
-    } = req.body;
+    const campaignObjective = req.body.campaignObjective || req.body.objective || 'Conversions / Sales';
+    const product = req.body.product || req.body.productName || '';
+    const productDesc = req.body.productDescription || '';
+    const websiteUrl = req.body.websiteUrl || req.body.landingPage || 'Not provided';
+    const targetAudience = req.body.targetAudience || {};
+    const budget = req.body.budget || {};
+    const creative = req.body.creative || req.body.creativeFormat || 'Video 9:16';
+    const cta = req.body.cta || req.body.callToAction || 'Learn More';
 
-    if (!product || !campaignObjective) {
+    if (!product && !productDesc) {
       return res.status(400).json({ error: 'Objective and product description are required.' });
     }
-
-    const ai = getGeminiClient();
 
     const systemPrompt = `You are a certified Facebook Ads (Meta Ads) Strategic Media Buyer.
 Generate a structured, actionable Facebook advertising campaign strategy blueprint.
@@ -258,26 +334,27 @@ Output MUST be strictly valid JSON matching:
 
     const prompt = `Plan a complete Facebook Ad Campaign:
 Campaign Objective: ${campaignObjective}
-Product / Service: ${product}
-Landing Page / Website: ${websiteUrl || 'Not provided'}
-Audience Details: Location: ${targetAudience?.location || 'Worldwide/Target Country'}, Age: ${targetAudience?.age || '22-55'}, Gender: ${targetAudience?.gender || 'All'}, Interests: ${targetAudience?.interests || 'General category buyers'}, Customer Type: ${targetAudience?.customerType || 'B2C'}
+Product / Service: ${product} ${productDesc ? `— ${productDesc}` : ''}
+Landing Page / Website: ${websiteUrl}
+Audience Details: Location: ${targetAudience?.location || 'Worldwide/Target Country'}, Age: ${targetAudience?.age || targetAudience?.ageRange || '22-55'}, Gender: ${targetAudience?.gender || 'All'}, Interests: ${targetAudience?.interests || 'General category buyers'}, Customer Type: ${targetAudience?.customerType || 'B2C'}
 Budget: $${budget?.dailyBudget || '25'}/day for ${budget?.duration || '14 days'}
-Selected Creative Format: ${creative || 'Video 9:16'}
-Call to Action: ${cta || 'Learn More'}`;
+Selected Creative Format: ${creative}
+Call to Action: ${cta}`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [
-        { role: 'user', parts: [{ text: `${systemPrompt}\n\nTask:\n${prompt}` }] },
-      ],
-      config: {
+    const text = await callGemini(
+      [{ role: 'user', parts: [{ text: `${systemPrompt}\n\nTask:\n${prompt}` }] }],
+      {
         temperature: 0.7,
         responseMimeType: 'application/json',
-      },
-    });
+      }
+    );
 
-    const parsed = extractJsonFromText(response.text || '{}');
-    return res.json({ success: true, data: parsed });
+    const parsed = extractJsonFromText(text);
+    return res.json({
+      success: true,
+      ...parsed,
+      data: parsed,
+    });
   } catch (error: any) {
     console.error('Error planning ad campaign:', error);
     return res.status(500).json({
@@ -337,8 +414,6 @@ app.post('/api/ai/ad-analyzer', async (req, res) => {
       cpm: Number(cpm.toFixed(2)),
     };
 
-    const ai = getGeminiClient();
-
     const systemPrompt = `You are a Senior Meta Ads Performance Analyst.
 You evaluate advertising metrics against industry standards (e.g. standard Meta benchmarks: CTR 1.0-1.5%, CPC $0.50-$2.00 depending on niche, CPM $15-$35, ROAS > 2.0x for e-commerce).
 You give clear, realistic diagnostic feedback. Do not present assumptions as absolute facts; state them clearly as data-driven recommendations.
@@ -376,21 +451,25 @@ Calculated Metrics:
 - Return On Ad Spend (ROAS): ${metrics.roas}x
 User notes / context: ${notes || 'Standard paid campaign'}`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [
-        { role: 'user', parts: [{ text: `${systemPrompt}\n\nTask:\n${prompt}` }] },
-      ],
-      config: {
+    const text = await callGemini(
+      [{ role: 'user', parts: [{ text: `${systemPrompt}\n\nTask:\n${prompt}` }] }],
+      {
         temperature: 0.6,
         responseMimeType: 'application/json',
-      },
-    });
+      }
+    );
 
-    const parsed = extractJsonFromText(response.text || '{}');
+    const parsed = extractJsonFromText(text);
 
     return res.json({
       success: true,
+      metrics,
+      performanceSummary: parsed.performanceSummary || 'Performance analysis calculated.',
+      strengths: parsed.strengths || [],
+      weaknesses: parsed.weaknesses || [],
+      possibleProblems: parsed.possibleProblems || [],
+      aiRecommendations: parsed.aiRecommendations || [],
+      nextActions: parsed.nextActions || [],
       data: {
         metrics,
         performanceSummary: parsed.performanceSummary || 'Performance analysis calculated.',
@@ -420,11 +499,8 @@ app.post('/api/ai/improve', async (req, res) => {
       return res.status(400).json({ error: 'Text to improve is required.' });
     }
 
-    const ai = getGeminiClient();
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [
+    const text = await callGemini(
+      [
         {
           role: 'user',
           parts: [
@@ -447,14 +523,18 @@ Output JSON format:
           ],
         },
       ],
-      config: {
+      {
         temperature: 0.7,
         responseMimeType: 'application/json',
-      },
-    });
+      }
+    );
 
-    const parsed = extractJsonFromText(response.text || '{}');
-    return res.json({ success: true, data: parsed });
+    const parsed = extractJsonFromText(text);
+    return res.json({
+      success: true,
+      ...parsed,
+      data: parsed,
+    });
   } catch (error: any) {
     console.error('Error improving text:', error);
     return res.status(500).json({ error: 'Failed to improve text.' });

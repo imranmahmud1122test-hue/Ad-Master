@@ -30,6 +30,7 @@ export const DEFAULT_PLANS: PlanConfig[] = [
     id: 'FREE',
     name: 'Free Starter',
     price: 0,
+    currency: 'BDT',
     billing: 'forever',
     monthlyCredits: 50,
     maxProjects: 5,
@@ -45,7 +46,8 @@ export const DEFAULT_PLANS: PlanConfig[] = [
   {
     id: 'PRO',
     name: 'Pro Marketer',
-    price: 39,
+    price: 1500,
+    currency: 'BDT',
     billing: 'per month',
     monthlyCredits: 350,
     maxProjects: 35,
@@ -63,7 +65,8 @@ export const DEFAULT_PLANS: PlanConfig[] = [
   {
     id: 'BUSINESS',
     name: 'Business Scale',
-    price: 99,
+    price: 3500,
+    currency: 'BDT',
     billing: 'per month',
     monthlyCredits: 1200,
     maxProjects: 200,

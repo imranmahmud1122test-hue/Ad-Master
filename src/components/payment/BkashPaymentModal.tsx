@@ -20,11 +20,13 @@ import { Card } from '../ui/Card';
 import { Badge } from '../ui/FeedbackComponents';
 import {
   BKASH_RECEIVER_NUMBER,
+  DEFAULT_BKASH_CONFIG,
+  getBkashAccountConfig,
   getPlanConfigs,
   submitBkashPayment,
   getUserPendingPayment,
 } from '../../services/paymentService';
-import { SubscriptionTier, PlanConfig, PaymentRecord } from '../../types';
+import { SubscriptionTier, PlanConfig, PaymentRecord, BkashAccountConfig } from '../../types';
 
 interface BkashPaymentModalProps {
   isOpen: boolean;
@@ -48,8 +50,10 @@ export const BkashPaymentModal: React.FC<BkashPaymentModalProps> = ({
   );
   const [plans, setPlans] = useState<PlanConfig[]>([]);
   const [loadingPlans, setLoadingPlans] = useState(true);
+  const [bkashConfig, setBkashConfig] = useState<BkashAccountConfig>(DEFAULT_BKASH_CONFIG);
 
   // Form states
+  const [senderNumber, setSenderNumber] = useState('');
   const [transactionId, setTransactionId] = useState('');
   const [paymentNote, setPaymentNote] = useState('');
   const [copied, setCopied] = useState(false);
@@ -69,8 +73,14 @@ export const BkashPaymentModal: React.FC<BkashPaymentModalProps> = ({
       setLoadingPlans(true);
       setCheckingPending(true);
       try {
-        const loadedPlans = await getPlanConfigs();
-        if (mounted) setPlans(loadedPlans);
+        const [loadedPlans, loadedBkashConfig] = await Promise.all([
+          getPlanConfigs(),
+          getBkashAccountConfig(),
+        ]);
+        if (mounted) {
+          setPlans(loadedPlans);
+          setBkashConfig(loadedBkashConfig);
+        }
 
         if (profile?.uid) {
           const pending = await getUserPendingPayment(profile.uid);
@@ -111,10 +121,12 @@ export const BkashPaymentModal: React.FC<BkashPaymentModalProps> = ({
       ],
     };
 
+  const activeReceiverNumber = bkashConfig.receiverNumber || BKASH_RECEIVER_NUMBER;
+
   const handleCopyNumber = () => {
-    navigator.clipboard.writeText(BKASH_RECEIVER_NUMBER);
+    navigator.clipboard.writeText(activeReceiverNumber);
     setCopied(true);
-    info('bKash number copied to clipboard!');
+    info(`bKash ${bkashConfig.accountType || 'Personal'} number (${activeReceiverNumber}) copied!`);
     setTimeout(() => setCopied(false), 2500);
   };
 
@@ -147,6 +159,7 @@ export const BkashPaymentModal: React.FC<BkashPaymentModalProps> = ({
         plan: selectedTier,
         amount: currentPlanConfig.price,
         transactionId: cleanTrx,
+        senderNumber: senderNumber.trim(),
         paymentNote: paymentNote.trim(),
       });
 
@@ -363,7 +376,7 @@ export const BkashPaymentModal: React.FC<BkashPaymentModalProps> = ({
                       ৳
                     </div>
                     <span className="text-xs font-bold uppercase tracking-wider text-[#E2136E]">
-                      Send Money to this bKash Number
+                      {bkashConfig.accountType === 'Merchant' ? 'Make Payment' : bkashConfig.accountType === 'Agent' ? 'Cash In' : 'Send Money'} to this bKash Number
                     </span>
                   </div>
                   <span className="text-xs font-extrabold text-slate-800 bg-white px-2.5 py-1 rounded-full border border-pink-200">
@@ -374,11 +387,18 @@ export const BkashPaymentModal: React.FC<BkashPaymentModalProps> = ({
                 {/* Receiver Number & Copy Button */}
                 <div className="bg-white rounded-xl p-3.5 border border-pink-200 flex items-center justify-between shadow-2xs">
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                      bKash Personal / Merchant Receiver
-                    </span>
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                        bKash {bkashConfig.accountType} Account
+                      </span>
+                      {bkashConfig.accountName && (
+                        <span className="text-[10px] text-[#E2136E] font-semibold">
+                          ({bkashConfig.accountName})
+                        </span>
+                      )}
+                    </div>
                     <span className="text-lg sm:text-2xl font-extrabold text-slate-900 tracking-wider font-mono">
-                      {BKASH_RECEIVER_NUMBER}
+                      {activeReceiverNumber}
                     </span>
                   </div>
                   <Button
@@ -404,21 +424,33 @@ export const BkashPaymentModal: React.FC<BkashPaymentModalProps> = ({
                   <span className="font-bold text-slate-900 block mb-1">Payment Instructions:</span>
                   <div className="space-y-1 pl-1">
                     <p>1. Open your <strong>bKash app</strong> or dial *247#.</p>
-                    <p>2. Choose <strong>Send Money</strong>.</p>
                     <p>
-                      3. Send <strong>৳{currentPlanConfig.price.toLocaleString()} BDT</strong> to{' '}
-                      <strong className="font-mono">{BKASH_RECEIVER_NUMBER}</strong>.
+                      2. Choose{' '}
+                      <strong>
+                        {bkashConfig.accountType === 'Merchant' ? 'Make Payment / Payment' : bkashConfig.accountType === 'Agent' ? 'Cash In' : 'Send Money'}
+                      </strong>.
                     </p>
-                    <p>4. Complete the payment with your bKash PIN.</p>
-                    <p>5. Copy the <strong>Transaction ID (TrxID)</strong> from the SMS or receipt.</p>
-                    <p>6. Enter your Transaction ID below and submit for verification.</p>
+                    <p>
+                      3. Transfer <strong>৳{currentPlanConfig.price.toLocaleString()} BDT</strong> to{' '}
+                      <strong className="font-mono text-[#E2136E]">{activeReceiverNumber}</strong>.
+                    </p>
+                    <p>4. Complete the transaction by entering your bKash PIN.</p>
+                    <p>5. Copy the <strong>Transaction ID (TrxID)</strong> from the bKash SMS or app confirmation.</p>
+                    <p>6. Paste your Transaction ID below and submit for instant manual verification.</p>
                   </div>
                 </div>
+
+                {bkashConfig.instructions && bkashConfig.instructions !== DEFAULT_BKASH_CONFIG.instructions && (
+                  <div className="mt-2 p-2 rounded-lg bg-pink-100/50 border border-pink-200 text-xs text-slate-700">
+                    <span className="font-semibold text-slate-800">Admin Note: </span>
+                    {bkashConfig.instructions}
+                  </div>
+                )}
 
                 <div className="mt-3.5 p-2.5 rounded-lg bg-white/80 border border-amber-300/80 text-[11px] text-amber-900 flex items-start gap-2">
                   <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                   <span>
-                    <strong>Important Notice:</strong> Access is activated only after manual verification
+                    <strong>Important Notice:</strong> Access is activated after manual verification
                     by an administrator. Please ensure the exact Transaction ID is provided.
                   </span>
                 </div>
@@ -448,32 +480,50 @@ export const BkashPaymentModal: React.FC<BkashPaymentModalProps> = ({
 
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
-                      bKash Number
+                      bKash Receiver Number
                     </label>
                     <input
                       type="text"
                       disabled
-                      value={BKASH_RECEIVER_NUMBER}
+                      value={activeReceiverNumber}
                       className="w-full px-3.5 py-2.5 bg-slate-100 text-slate-700 text-sm font-mono font-semibold rounded-lg border border-slate-200 cursor-not-allowed"
                     />
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
-                    Transaction ID (TrxID) <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. 9J28DAK10L"
-                    value={transactionId}
-                    onChange={(e) => setTransactionId(e.target.value.toUpperCase())}
-                    className="w-full px-3.5 py-2.5 bg-white text-slate-900 text-sm font-mono uppercase tracking-wider rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#E2136E] focus:border-transparent shadow-2xs"
-                  />
-                  <span className="text-[11px] text-slate-400 mt-1 block">
-                    Found in your bKash confirmation SMS or transaction statement
-                  </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+                      Your bKash Wallet Number <span className="text-slate-400 font-normal">(Sender)</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 017xxxxxxxx"
+                      value={senderNumber}
+                      onChange={(e) => setSenderNumber(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-white text-slate-900 text-sm font-mono rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#E2136E] focus:border-transparent shadow-2xs"
+                    />
+                    <span className="text-[10px] text-slate-400 mt-1 block">
+                      The bKash number you sent the money from
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+                      Transaction ID (TrxID) <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. 9J28DAK10L"
+                      value={transactionId}
+                      onChange={(e) => setTransactionId(e.target.value.toUpperCase())}
+                      className="w-full px-3.5 py-2.5 bg-white text-slate-900 text-sm font-mono uppercase tracking-wider rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#E2136E] focus:border-transparent shadow-2xs"
+                    />
+                    <span className="text-[10px] text-slate-400 mt-1 block">
+                      Found in your bKash SMS or receipt statement
+                    </span>
+                  </div>
                 </div>
 
                 <div>

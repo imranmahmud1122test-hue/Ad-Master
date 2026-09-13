@@ -340,8 +340,8 @@ export const HomePage: React.FC = () => {
               <h3 className="text-lg font-bold text-slate-900">Free Starter</h3>
               <p className="text-xs text-slate-500 mt-1">Perfect for trying AdMaster AI</p>
               <div className="my-6">
-                <span className="text-4xl font-extrabold text-slate-900">$0</span>
-                <span className="text-xs text-slate-500 ml-1">/ forever</span>
+                <span className="text-4xl font-extrabold text-slate-900">৳0</span>
+                <span className="text-xs text-slate-500 ml-1">BDT / forever</span>
               </div>
               <ul className="space-y-2.5 text-xs text-slate-600 mb-6">
                 <li className="flex items-center gap-2">
@@ -366,11 +366,16 @@ export const HomePage: React.FC = () => {
               Most Popular
             </span>
             <div>
-              <h3 className="text-lg font-bold text-slate-900">Pro Marketer</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-bold text-slate-900">Pro Marketer</h3>
+                <span className="text-[10px] bg-pink-100 text-[#E2136E] font-bold px-2 py-0.5 rounded-full">
+                  bKash Upgrade
+                </span>
+              </div>
               <p className="text-xs text-slate-500 mt-1">For active e-commerce and media buyers</p>
               <div className="my-6">
-                <span className="text-4xl font-extrabold text-slate-900">$39</span>
-                <span className="text-xs text-slate-500 ml-1">/ month</span>
+                <span className="text-4xl font-extrabold text-slate-900">৳1,500</span>
+                <span className="text-xs text-slate-500 ml-1">BDT / month</span>
               </div>
               <ul className="space-y-2.5 text-xs text-slate-600 mb-6">
                 <li className="flex items-center gap-2 font-medium text-slate-900">
@@ -387,19 +392,24 @@ export const HomePage: React.FC = () => {
                 </li>
               </ul>
             </div>
-            <Button variant="primary" className="w-full" onClick={() => navigate('/pricing')}>
-              Upgrade to Pro
+            <Button variant="primary" className="w-full bg-gradient-to-r from-[#D12053] to-[#E2136E] hover:from-[#b91544] hover:to-[#cb0f61] text-white border-0" onClick={() => navigate('/pricing')}>
+              Upgrade to Pro (৳1,500 BDT)
             </Button>
           </div>
 
           {/* Business */}
           <div className="p-6 rounded-2xl border border-slate-200 bg-white shadow-xs flex flex-col justify-between">
             <div>
-              <h3 className="text-lg font-bold text-slate-900">Business Scale</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-bold text-slate-900">Business Scale</h3>
+                <span className="text-[10px] bg-pink-100 text-[#E2136E] font-bold px-2 py-0.5 rounded-full">
+                  bKash Upgrade
+                </span>
+              </div>
               <p className="text-xs text-slate-500 mt-1">For marketing agencies &amp; multi-brands</p>
               <div className="my-6">
-                <span className="text-4xl font-extrabold text-slate-900">$99</span>
-                <span className="text-xs text-slate-500 ml-1">/ month</span>
+                <span className="text-4xl font-extrabold text-slate-900">৳3,500</span>
+                <span className="text-xs text-slate-500 ml-1">BDT / month</span>
               </div>
               <ul className="space-y-2.5 text-xs text-slate-600 mb-6">
                 <li className="flex items-center gap-2">

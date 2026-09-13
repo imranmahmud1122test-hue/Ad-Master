@@ -157,3 +157,47 @@ export const AILoadingState: React.FC<{ message?: string }> = ({
 export const Skeleton: React.FC<{ className?: string }> = ({ className = '' }) => {
   return <div className={`bg-slate-200/80 animate-pulse rounded-md ${className}`} />;
 };
+
+// -------------------------------------------------------------
+// Confirmation Modal Component (Safe for iFrames)
+// -------------------------------------------------------------
+export const ConfirmModal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title: string;
+  message: string;
+  confirmText?: string;
+  confirmVariant?: 'danger' | 'primary';
+}> = ({
+  isOpen,
+  onClose,
+  onConfirm,
+  title,
+  message,
+  confirmText = 'Confirm',
+  confirmVariant = 'danger',
+}) => {
+  if (!isOpen) return null;
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={title} maxWidth="sm">
+      <p className="text-sm text-slate-600 mb-6">{message}</p>
+      <div className="flex items-center justify-end gap-3">
+        <Button variant="outline" size="sm" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button
+          variant={confirmVariant}
+          size="sm"
+          onClick={() => {
+            onConfirm();
+            onClose();
+          }}
+        >
+          {confirmText}
+        </Button>
+      </div>
+    </Modal>
+  );
+};
+

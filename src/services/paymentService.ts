@@ -18,11 +18,99 @@ import {
   PaymentStatus,
   PlanConfig,
   AuditLog,
+  BkashAccountConfig,
 } from '../types';
 import { createNotification } from './notificationService';
 import { DEFAULT_PLANS } from './firestoreService';
 
-export const BKASH_RECEIVER_NUMBER = '01859340742';
+export const BKASH_CONFIG_SETTING_DOC = 'bkash_account_config';
+
+export const DEFAULT_BKASH_CONFIG: BkashAccountConfig = {
+  receiverNumber: '01859340742',
+  accountType: 'Personal',
+  accountName: 'AdMaster AI Official',
+  instructions: 'Use the bKash app or dial *247# to Send Money to this bKash number. Once sent, enter the Transaction ID (TrxID) below for admin approval.',
+};
+
+export let BKASH_RECEIVER_NUMBER = '01859340742';
+
+/**
+ * Get current bKash account settings (Receiver Number, Account Type, Instructions)
+ */
+export async function getBkashAccountConfig(): Promise<BkashAccountConfig> {
+  // Check local storage cache first for instant UI response
+  try {
+    const cached = localStorage.getItem('admaster_bkash_config');
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (parsed?.receiverNumber) {
+        BKASH_RECEIVER_NUMBER = parsed.receiverNumber;
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  try {
+    const docRef = doc(db, 'settings', BKASH_CONFIG_SETTING_DOC);
+    const snap = await getDoc(docRef);
+    if (snap.exists() && snap.data()?.receiverNumber) {
+      const config = snap.data() as BkashAccountConfig;
+      BKASH_RECEIVER_NUMBER = config.receiverNumber;
+      try {
+        localStorage.setItem('admaster_bkash_config', JSON.stringify(config));
+      } catch (e) {}
+      return config;
+    } else if (!snap.exists()) {
+      // Auto-initialize Firestore settings document with default wallet number 01859340742
+      try {
+        await setDoc(docRef, DEFAULT_BKASH_CONFIG, { merge: true });
+      } catch (e) {}
+    }
+  } catch (err) {
+    console.warn('Could not fetch remote bkash config, using cached or default:', err);
+  }
+
+  try {
+    const cached = localStorage.getItem('admaster_bkash_config');
+    if (cached) {
+      return JSON.parse(cached) as BkashAccountConfig;
+    }
+  } catch (e) {}
+
+  return DEFAULT_BKASH_CONFIG;
+}
+
+/**
+ * Admin: Update bKash account settings in Firestore & cache
+ */
+export async function updateBkashAccountConfig(
+  config: BkashAccountConfig,
+  adminEmail: string
+): Promise<void> {
+  const docRef = doc(db, 'settings', BKASH_CONFIG_SETTING_DOC);
+  const payload: BkashAccountConfig = {
+    ...config,
+    updatedAt: new Date().toISOString(),
+    updatedBy: adminEmail,
+  };
+  await setDoc(docRef, payload, { merge: true });
+
+  BKASH_RECEIVER_NUMBER = config.receiverNumber;
+  try {
+    localStorage.setItem('admaster_bkash_config', JSON.stringify(payload));
+  } catch (e) {}
+
+  await recordAuditLog({
+    action: 'UPDATE_BKASH_ACCOUNT_CONFIG',
+    performedBy: adminEmail,
+    details: {
+      receiverNumber: config.receiverNumber,
+      accountType: config.accountType,
+      accountName: config.accountName,
+    },
+  });
+}
 
 // Dynamic plan storage helper
 const PLANS_SETTING_DOC = 'platform_plans';
@@ -232,9 +320,11 @@ export async function submitBkashPayment(params: {
   plan: SubscriptionTier;
   amount: number;
   transactionId: string;
+  senderNumber?: string;
   paymentNote?: string;
 }): Promise<PaymentRecord> {
   const cleanTrx = params.transactionId.trim().toUpperCase();
+  const cleanSender = params.senderNumber?.trim() || '';
 
   if (!cleanTrx) {
     throw new Error('Please enter a valid bKash Transaction ID.');
@@ -265,6 +355,7 @@ export async function submitBkashPayment(params: {
     currency: 'BDT',
     paymentMethod: 'BKASH',
     receiverNumber: BKASH_RECEIVER_NUMBER,
+    senderNumber: cleanSender,
     transactionId: cleanTrx,
     paymentStatus: 'PENDING',
     status: 'PENDING',
